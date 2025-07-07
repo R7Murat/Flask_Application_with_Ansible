@@ -1,0 +1,76 @@
+- name: Install docker
+  gather_facts: No
+  any_errors_fatal: true
+  hosts: _prod
+  vars:
+    db_public_ip:
+    app_public_ip:
+  become: true
+  tasks:
+    - name: Set the public IP address of the first instance in the '_Ansible_Db' group as a variable
+      set_fact:
+        db_public_ip: "{{ hostvars[groups['_Ansible_Db'][0]].ansible_host }}" 
+        app_public_ip: "{{ hostvars[groups['_Ansible_App'][0]].ansible_host }}"
+    - name: upgrade all packages
+      ansible.builtin.yum: 
+        name: '*'
+        state: latest
+    
+    - name: Install Docker
+      ansible.builtin.package:
+        name: docker
+        state: latest
+
+    - name: Start Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user ec2-user to docker group
+      ansible.builtin.user:
+        name: ec2-user
+        groups: docker
+        append: yes
+
+
+- name: Mysql Database configuration
+  hosts: _Ansible_Db
+  become: true
+  gather_facts: No
+  any_errors_fatal: true
+  vars:
+    container_name: mysql-container
+    image_name: mysql:latest
+
+  tasks:
+    - name: remove {{ container_name }} container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+        force_kill: true
+
+    - name: remove "{{ image_name }}" image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        state: absent
+
+    - name: Launch mysql docker container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        state: started
+        ports: 
+        - "3306:3306"
+        env:
+          MYSQL_ROOT_PASSWORD: R1234r
+          MYSQL_DATABASE: araba_kiralama
+          MYSQL_USER: admin
+          MYSQL_PASSWORD: admin123
+        volumes:
+          - /db-data:/var/lib/mysql
+      register: container_info
+    
+    - name: print the container info
+      ansible.builtin.debug:
+        var: container_info
