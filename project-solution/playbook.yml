@@ -74,3 +74,61 @@
     - name: print the container info
       ansible.builtin.debug:
         var: container_info
+        
+
+- name: App Server configuration
+  hosts: _Ansible_App
+  become: true
+  gather_facts: No
+  any_errors_fatal: true
+  vars: 
+    container_path: /home/ec2-user/app
+    container_name: app-container
+    image_name: techpro/app
+
+  tasks:
+    - name: copy files to the app node
+      copy:
+        src: /home/ec2-user/Techpro-Rental-Car/
+        dest: "{{ container_path }}"
+
+    - name: remove {{ container_name }} container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+        force_kill: true
+
+    - name: remove "{{ image_name }}" image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        state: absent
+  
+    - name: build container image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        build:
+          path: "{{ container_path }}"
+        source: build
+        state: present
+
+    - name: Launch app docker container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        state: started
+        env:
+          FLASK_ENV: production
+          SECRET_KEY: my_secret_key
+          DB_USER: admin
+          DB_PASSWORD: admin123
+          DB_HOST: "{{ db_public_ip }}"
+          DB_NAME: araba_kiralama
+        ports: 
+        - "8000:8000"
+        volumes:
+          - /home/ec2-user/app:/app
+      register: container_info
+    
+    - name: print the container info
+      ansible.builtin.debug:
+        var: container_info
