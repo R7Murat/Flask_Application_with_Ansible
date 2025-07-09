@@ -74,7 +74,7 @@
     - name: print the container info
       ansible.builtin.debug:
         var: container_info
-        
+
 
 - name: App Server configuration
   hosts: _Ansible_App
@@ -127,6 +127,56 @@
         - "8000:8000"
         volumes:
           - /home/ec2-user/app:/app
+      register: container_info
+    
+    - name: print the container info
+      ansible.builtin.debug:
+        var: container_info
+
+
+- name: Nginx Server configuration
+  hosts: _Ansible_Nginx
+  become: true
+  gather_facts: No
+  any_errors_fatal: true
+  vars:
+    container_path: /home/ec2-user/nginx.conf
+    container_name: nginx-container
+    image_name: nginx:latest
+
+  tasks:
+    - name: copy files to the nginx node
+      copy:
+        src: /home/ec2-user/Techpro-Rental-Car/nginx.conf
+        dest: "{{ container_path }}"
+
+    - name: Set environment variables and run envsubst in one task
+      shell: |
+        export DOMAIN_NAME=techprodevops.com
+        export APP_IP={{ app_public_ip }}
+        envsubst '${DOMAIN_NAME} ${APP_IP}' < {{ container_path }} > /home/ec2-user/nginx2.conf
+
+    - name: remove {{ container_name }} container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+        force_kill: true
+
+    - name: remove "{{ image_name }}" image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        state: absent
+
+
+    - name: Launch nginx docker container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        state: started
+        volumes:
+          - /home/ec2-user/nginx2.conf:/etc/nginx/nginx.conf
+        ports: 
+        - "80:80"
       register: container_info
     
     - name: print the container info
